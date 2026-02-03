@@ -1,27 +1,24 @@
-//go:build !windows
+//go:build windows
 
 package bridge
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/creack/pty"
-	"golang.org/x/term"
+	"github.com/UserExistsError/conpty"
 )
 
 type PTY struct {
-	cmd      *exec.Cmd
-	ptmx     *os.File
-	mu       sync.Mutex
-	closed   bool
-	oldState *term.State
+	cmd    *exec.Cmd
+	cpty   *conpty.ConPty
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewPTY(command string, args []string) *PTY {
@@ -32,32 +29,14 @@ func NewPTY(command string, args []string) *PTY {
 }
 
 func (p *PTY) Start(outputCallback func(line string)) error {
-	ptmx, err := pty.Start(p.cmd)
+	cpty, err := conpty.Start(p.cmd.Path, conpty.ConPtyDimensions(120, 40))
 	if err != nil {
 		return err
 	}
-	p.ptmx = ptmx
-
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return err
-	}
-	p.oldState = oldState
-
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGWINCH)
-	go func() {
-		for range ch {
-			if p.closed {
-				return
-			}
-			_ = pty.InheritSize(os.Stdin, p.ptmx)
-		}
-	}()
-	ch <- syscall.SIGWINCH
+	p.cpty = cpty
 
 	go func() {
-		reader := bufio.NewReader(p.ptmx)
+		reader := bufio.NewReader(cpty)
 		lineBuffer := make([]byte, 0, 1024)
 
 		buf := make([]byte, 4096)
@@ -88,7 +67,7 @@ func (p *PTY) Start(outputCallback func(line string)) error {
 	}()
 
 	go func() {
-		_, _ = io.Copy(p.ptmx, os.Stdin)
+		_, _ = io.Copy(cpty, os.Stdin)
 	}()
 
 	return nil
@@ -102,20 +81,24 @@ func (p *PTY) InjectText(text string, sendEnter bool) error {
 		return io.ErrClosedPipe
 	}
 
-	_, err := p.ptmx.WriteString(text)
+	_, err := p.cpty.Write([]byte(text))
 	if err != nil {
 		return err
 	}
 
 	if sendEnter {
 		time.Sleep(500 * time.Millisecond)
-		_, err = p.ptmx.Write([]byte{'\r'})
+		_, err = p.cpty.Write([]byte{'\r'})
 	}
 	return err
 }
 
 func (p *PTY) Wait() error {
-	return p.cmd.Wait()
+	if p.cpty == nil {
+		return nil
+	}
+	_, err := p.cpty.Wait(context.Background())
+	return err
 }
 
 func (p *PTY) Close() error {
@@ -123,19 +106,18 @@ func (p *PTY) Close() error {
 	p.closed = true
 	p.mu.Unlock()
 
-	if p.oldState != nil {
-		_ = term.Restore(int(os.Stdin.Fd()), p.oldState)
-	}
-
-	if p.ptmx != nil {
-		return p.ptmx.Close()
+	if p.cpty != nil {
+		return p.cpty.Close()
 	}
 	return nil
 }
 
 func (p *PTY) Running() bool {
-	if p.cmd == nil || p.cmd.Process == nil {
+	if p.cpty == nil {
 		return false
 	}
-	return p.cmd.ProcessState == nil
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	_, err := p.cpty.Wait(ctx)
+	return err == context.DeadlineExceeded
 }
