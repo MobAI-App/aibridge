@@ -8,7 +8,7 @@ import (
 
 func TestBusyDetectorMatch(t *testing.T) {
 	var called int32
-	d, err := NewBusyDetector(`esc to interrupt`, func() {
+	d, err := NewBusyDetector(`thinking`, func() {
 		atomic.AddInt32(&called, 1)
 	}, false)
 	if err != nil {
@@ -19,7 +19,7 @@ func TestBusyDetectorMatch(t *testing.T) {
 		t.Error("Should be idle initially")
 	}
 
-	d.ProcessLine("esc to interrupt")
+	d.ProcessLine("Nucleating… (thinking)")
 	if d.IsIdle() {
 		t.Error("Should be busy after pattern match")
 	}
@@ -34,7 +34,7 @@ func TestBusyDetectorMatch(t *testing.T) {
 }
 
 func TestBusyDetectorSetBusy(t *testing.T) {
-	d, _ := NewBusyDetector(`esc to interrupt`, nil, false)
+	d, _ := NewBusyDetector(`thinking`, nil, false)
 
 	if !d.IsIdle() {
 		t.Error("Should be idle initially")

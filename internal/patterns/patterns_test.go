@@ -7,7 +7,7 @@ func TestGetPattern(t *testing.T) {
 		tool  string
 		regex string
 	}{
-		{"claude", "esc to interrupt"},
+		{"claude", "thinking"},
 		{"codex", "esc to interrupt"},
 		{"gemini", "esc to cancel"},
 	}
