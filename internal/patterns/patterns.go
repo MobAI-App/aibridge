@@ -5,7 +5,7 @@ type Pattern struct {
 }
 
 var BuiltinPatterns = map[string]Pattern{
-	"claude": {Regex: `esc to interrupt`},
+	"claude": {Regex: `thinking`},
 	"codex":  {Regex: `esc to interrupt`},
 	"gemini": {Regex: `esc to cancel`},
 }
