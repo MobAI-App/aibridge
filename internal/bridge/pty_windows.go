@@ -15,16 +15,18 @@ import (
 )
 
 type PTY struct {
-	cmd    *exec.Cmd
-	cpty   *conpty.ConPty
-	mu     sync.Mutex
-	closed bool
+	cmd           *exec.Cmd
+	cpty          *conpty.ConPty
+	mu            sync.Mutex
+	closed        bool
+	injectDelayMs int
 }
 
-func NewPTY(command string, args []string) *PTY {
+func NewPTY(command string, args []string, injectDelayMs int) *PTY {
 	cmd := exec.Command(command, args...)
 	return &PTY{
-		cmd: cmd,
+		cmd:           cmd,
+		injectDelayMs: injectDelayMs,
 	}
 }
 
@@ -87,7 +89,7 @@ func (p *PTY) InjectText(text string, sendEnter bool) error {
 	}
 
 	if sendEnter {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(time.Duration(p.injectDelayMs) * time.Millisecond)
 		_, err = p.cpty.Write([]byte{'\r'})
 	}
 	return err

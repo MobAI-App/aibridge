@@ -21,9 +21,9 @@ type Bridge struct {
 	stopCh       chan struct{}
 }
 
-func New(command string, args []string, busyPattern string, verbose, paranoid bool) (*Bridge, error) {
+func New(command string, args []string, busyPattern string, verbose, paranoid bool, injectDelayMs int) (*Bridge, error) {
 	b := &Bridge{
-		pty:       NewPTY(command, args),
+		pty:       NewPTY(command, args, injectDelayMs),
 		queue:     NewQueue(),
 		startTime: time.Now(),
 		toolName:  command,

@@ -2,29 +2,21 @@ package bridge
 
 import (
 	"log"
-	"regexp"
 	"sync"
 	"time"
 )
 
 type BusyDetector struct {
-	pattern     *regexp.Regexp
 	mu          sync.RWMutex
 	idle        bool
-	lastBusy    time.Time
+	lastOutput  time.Time
 	onIdle      func()
 	verbose     bool
 	idleTimeout time.Duration
 }
 
 func NewBusyDetector(pattern string, onIdle func(), verbose bool) (*BusyDetector, error) {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-
 	d := &BusyDetector{
-		pattern:     re,
 		idle:        true,
 		onIdle:      onIdle,
 		verbose:     verbose,
@@ -43,10 +35,10 @@ func (d *BusyDetector) checkIdleLoop() {
 	for range ticker.C {
 		d.mu.Lock()
 		wasIdle := d.idle
-		if !d.idle && time.Since(d.lastBusy) > d.idleTimeout {
+		if !d.idle && time.Since(d.lastOutput) > d.idleTimeout {
 			d.idle = true
 			if d.verbose {
-				log.Printf("Idle timeout - no busy signal for %v", d.idleTimeout)
+				log.Printf("Idle timeout - no output for %v", d.idleTimeout)
 			}
 		}
 		isIdle := d.idle
@@ -59,15 +51,13 @@ func (d *BusyDetector) checkIdleLoop() {
 }
 
 func (d *BusyDetector) ProcessLine(line string) {
-	if d.pattern.MatchString(line) {
-		d.mu.Lock()
-		d.idle = false
-		d.lastBusy = time.Now()
-		d.mu.Unlock()
-		if d.verbose {
-			log.Printf("Busy pattern matched: %q", line)
-		}
+	if d.verbose {
+		log.Printf("PTY line: %q", line)
 	}
+	d.mu.Lock()
+	d.idle = false
+	d.lastOutput = time.Now()
+	d.mu.Unlock()
 }
 
 func (d *BusyDetector) IsIdle() bool {
@@ -80,5 +70,5 @@ func (d *BusyDetector) SetBusy() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.idle = false
-	d.lastBusy = time.Now()
+	d.lastOutput = time.Now()
 }

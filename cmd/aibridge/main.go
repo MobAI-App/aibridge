@@ -25,6 +25,7 @@ var (
 	flagVerbose     bool
 	flagVersion     bool
 	flagParanoid    bool
+	flagInjectDelay int
 )
 
 func main() {
@@ -44,6 +45,7 @@ with a PTY and exposes an HTTP API for external text injection.`,
 	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", config.DefaultTimeout, "Sync injection timeout in seconds")
 	rootCmd.Flags().BoolVarP(&flagVerbose, "verbose", "v", false, "Enable verbose logging")
 	rootCmd.Flags().BoolVar(&flagParanoid, "paranoid", false, "Inject text without hitting Enter")
+	rootCmd.Flags().IntVar(&flagInjectDelay, "inject-delay", config.DefaultInjectDelay, "Delay in ms between text injection and Enter key")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "Print version and exit")
 
 	rootCmd.PreRun = func(cmd *cobra.Command, args []string) {
@@ -79,11 +81,17 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if flagVerbose {
+		logFile, err := os.OpenFile("/tmp/aibridge.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Fatalf("Failed to open log file: %v", err)
+		}
+		defer logFile.Close()
+		log.SetOutput(logFile)
 		log.Printf("Starting aibridge with command: %s %v", command, commandArgs)
 		log.Printf("Using pattern: %s", pattern.Regex)
 	}
 
-	b, err := bridge.New(command, commandArgs, pattern.Regex, flagVerbose, flagParanoid)
+	b, err := bridge.New(command, commandArgs, pattern.Regex, flagVerbose, flagParanoid, flagInjectDelay)
 	if err != nil {
 		log.Fatalf("Failed to create bridge: %v", err)
 	}

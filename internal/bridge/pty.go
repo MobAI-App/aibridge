@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -22,12 +23,19 @@ type PTY struct {
 	mu       sync.Mutex
 	closed   bool
 	oldState *term.State
+
+	echoMu        sync.Mutex
+	echoWaiting   string
+	echoBuf       string
+	echoCh        chan struct{}
+	injectDelayMs int
 }
 
-func NewPTY(command string, args []string) *PTY {
+func NewPTY(command string, args []string, injectDelayMs int) *PTY {
 	cmd := exec.Command(command, args...)
 	return &PTY{
-		cmd: cmd,
+		cmd:           cmd,
+		injectDelayMs: injectDelayMs,
 	}
 }
 
@@ -69,6 +77,8 @@ func (p *PTY) Start(outputCallback func(line string)) error {
 
 			_, _ = os.Stdout.Write(buf[:n])
 
+			p.checkEcho(string(buf[:n]))
+
 			for i := 0; i < n; i++ {
 				b := buf[i]
 				if b == '\n' || b == '\r' {
@@ -102,16 +112,61 @@ func (p *PTY) InjectText(text string, sendEnter bool) error {
 		return io.ErrClosedPipe
 	}
 
-	_, err := p.ptmx.WriteString(text)
-	if err != nil {
+	if sendEnter {
+		p.echoMu.Lock()
+		p.echoWaiting = text
+		p.echoCh = make(chan struct{})
+		ch := p.echoCh
+		p.echoMu.Unlock()
+
+		_, err := p.ptmx.WriteString(text)
+		if err != nil {
+			p.clearEchoWait()
+			return err
+		}
+
+		select {
+		case <-ch:
+			time.Sleep(time.Duration(p.injectDelayMs) * time.Millisecond)
+		case <-time.After(2 * time.Second):
+		}
+		p.clearEchoWait()
+
+		_, err = p.ptmx.Write([]byte{'\r'})
 		return err
 	}
 
-	if sendEnter {
-		time.Sleep(500 * time.Millisecond)
-		_, err = p.ptmx.Write([]byte{'\r'})
-	}
+	_, err := p.ptmx.WriteString(text)
 	return err
+}
+
+func (p *PTY) clearEchoWait() {
+	p.echoMu.Lock()
+	p.echoWaiting = ""
+	p.echoBuf = ""
+	p.echoCh = nil
+	p.echoMu.Unlock()
+}
+
+func (p *PTY) checkEcho(data string) {
+	p.echoMu.Lock()
+	defer p.echoMu.Unlock()
+
+	if p.echoWaiting == "" || p.echoCh == nil {
+		return
+	}
+
+	p.echoBuf += data
+	needle := p.echoWaiting
+	if len(needle) > 20 {
+		needle = needle[len(needle)-20:]
+	}
+	if strings.Contains(p.echoBuf, needle) {
+		close(p.echoCh)
+		p.echoWaiting = ""
+		p.echoBuf = ""
+		p.echoCh = nil
+	}
 }
 
 func (p *PTY) Wait() error {

@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-func TestBusyDetectorMatch(t *testing.T) {
+func TestBusyDetectorOutput(t *testing.T) {
 	var called int32
-	d, err := NewBusyDetector(`thinking`, func() {
+	d, err := NewBusyDetector("", func() {
 		atomic.AddInt32(&called, 1)
 	}, false)
 	if err != nil {
@@ -19,9 +19,9 @@ func TestBusyDetectorMatch(t *testing.T) {
 		t.Error("Should be idle initially")
 	}
 
-	d.ProcessLine("Nucleating… (thinking)")
+	d.ProcessLine("any output at all")
 	if d.IsIdle() {
-		t.Error("Should be busy after pattern match")
+		t.Error("Should be busy after any output")
 	}
 
 	time.Sleep(600 * time.Millisecond)
@@ -34,7 +34,7 @@ func TestBusyDetectorMatch(t *testing.T) {
 }
 
 func TestBusyDetectorSetBusy(t *testing.T) {
-	d, _ := NewBusyDetector(`thinking`, nil, false)
+	d, _ := NewBusyDetector("", nil, false)
 
 	if !d.IsIdle() {
 		t.Error("Should be idle initially")
@@ -43,12 +43,5 @@ func TestBusyDetectorSetBusy(t *testing.T) {
 	d.SetBusy()
 	if d.IsIdle() {
 		t.Error("Should not be idle after SetBusy")
-	}
-}
-
-func TestBusyDetectorInvalidPattern(t *testing.T) {
-	_, err := NewBusyDetector(`[invalid`, nil, false)
-	if err == nil {
-		t.Error("Expected error for invalid regex")
 	}
 }
