@@ -238,6 +238,11 @@ go test ./...
 - **Localhost only** - HTTP server binds to 127.0.0.1 by default
 - **No authentication** - Designed for local development use
 - **CORS enabled** - Allows requests from any origin for browser extensions
+  
+
+## Used By
+
+[MobAI](https://mobai.run) — a desktop app that gives AI coding agents the ability to see and control mobile devices. MobAI uses AiBridge to inject mobile app context (screenshots, UI trees, device state) into terminal-based coding agents like Claude Code, Codex, and Gemini CLI.
 
 ## License
 
